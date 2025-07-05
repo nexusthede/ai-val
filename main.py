@@ -1,49 +1,56 @@
+from keep_alive import keep_alive
+keep_alive()
+
 import discord
 import os
-import aiohttp
-from keep_alive import keep_alive
-from discord.ext import commands
-from dotenv import load_dotenv
-
-load_dotenv()
-TOKEN = os.getenv("TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
+import requests
 
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
+bot = discord.Client(intents=intents)
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+HF_TOKEN = os.getenv("HF_TOKEN")
+BOT_TOKEN = os.getenv("TOKEN")
 
-CHANNELS = []  # Can leave empty for all channels
+async def generate_reply(message_content):
+    headers = {
+        "Authorization": f"Bearer {HF_TOKEN}"
+    }
+    json_data = {
+        "inputs": {
+            "past_user_inputs": [],
+            "generated_responses": [],
+            "text": f"{message_content}"
+        }
+    }
+    response = requests.post(
+        "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium",
+        headers=headers,
+        json=json_data
+    )
+
+    if response.status_code == 200:
+        data = response.json()
+        return data.get('generated_text', "Hmph... not like I care what you say.")
+    else:
+        return f"Hmph... I’m not answering that. (HuggingFace Error {response.status_code})"
 
 @bot.event
 async def on_ready():
-    await bot.change_presence(activity=discord.Streaming(name="Tch... I hate ducks 🦆", url="https://twitch.tv/tsundereval"))
-    print(f"💖 Val is online as {bot.user}")
+    await bot.change_presence(
+        activity=discord.Streaming(name="Hating Duck 💢", url="https://twitch.tv/valbot")
+    )
+    print(f"Logged in as {bot.user}")
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    if CHANNELS and message.channel.id not in CHANNELS:
-        return
+    if bot.user.mentioned_in(message) or "val" in message.content.lower():
+        async with message.channel.typing():
+            reply = await generate_reply(message.content)
+            await message.channel.send(reply)
 
-    if "val" in message.content.lower() or bot.user in message.mentions:
-        await message.channel.typing()
-        prompt = message.content.strip()
-        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-        payload = {"inputs": f"{prompt}\nTsundere girl Val:"}
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post("https://api-inference.huggingface.co/models/facebook/blenderbot-3B", headers=headers, json=payload) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    reply = data.get("generated_text", "Hmph... I don’t feel like talking.")
-                else:
-                    reply = f"Hmph... I’m not answering that. (Hugging Face Error {resp.status})"
-
-        await message.reply(reply)
-
-    await bot.process_commands(message)
+bot.run(BOT_TOKEN)
