@@ -2,7 +2,7 @@ import os
 import discord
 import aiohttp
 from discord.ext import commands
-from keep_alive import keep_alive  # if you want to keep a webserver alive for uptime monitor
+from keep_alive import keep_alive  # if you use uptime monitor
 
 TOKEN = os.getenv("TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -34,7 +34,6 @@ async def on_message(message):
     mentioned = bot.user.mentioned_in(message) or "val" in content
 
     if mentioned:
-        # typing indicator fixed — use channel.typing() as async context manager
         async with message.channel.typing():
             user_input = message.content
 
@@ -52,16 +51,21 @@ async def on_message(message):
 
                     if resp.status == 200:
                         data = await resp.json()
-                        if isinstance(data, list) and len(data) > 0:
-                            reply = data[0].get("generated_text", "").split("Val:")[-1].strip()
-                            if reply:
-                                await message.reply(reply)
-                            else:
-                                await message.reply("Hmph... whatever.")
+                        # The response is usually a dict with 'generated_text' key or list, so check both
+                        if isinstance(data, dict) and "generated_text" in data:
+                            reply = data["generated_text"].split("Val:")[-1].strip()
+                        elif isinstance(data, list) and len(data) > 0 and "generated_text" in data[0]:
+                            reply = data[0]["generated_text"].split("Val:")[-1].strip()
                         else:
-                            await message.reply("Hmph... not in the mood.")
+                            reply = ""
+
+                        if reply:
+                            await message.reply(reply)
+                        else:
+                            await message.reply("Hmph... whatever.")
                     else:
                         await message.reply(f"Hmph... I’m not answering that. (HuggingFace Error {resp.status})")
+        return  # THIS stops double replies
 
     await bot.process_commands(message)
 
