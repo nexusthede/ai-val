@@ -2,7 +2,25 @@ import os
 import discord
 from discord.ext import commands
 import openai
+from flask import Flask
+from threading import Thread
 
+# ----- Flask keep-alive server -----
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "✅ Val is awake and ready!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.daemon = True
+    t.start()
+
+# ----- Discord bot setup -----
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -13,7 +31,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 async def on_ready():
     print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Streaming(
-        name="Ugh... I really *hate* that Duck guy... D-Don’t ask why!",
+        name="Ugh... I *really* hate that Duck guy... D-Don’t ask why!",
         url="https://twitch.tv/nexus"
     ))
 
@@ -49,4 +67,6 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
+# ----- Start keep-alive server and run bot -----
+keep_alive()
 bot.run(os.getenv("TOKEN"))
