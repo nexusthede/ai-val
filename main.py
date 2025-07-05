@@ -2,7 +2,7 @@ import os
 import discord
 import aiohttp
 from discord.ext import commands
-from keep_alive import keep_alive
+from keep_alive import keep_alive  # if you want to keep a webserver alive for uptime monitor
 
 TOKEN = os.getenv("TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -21,7 +21,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def on_ready():
     print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Streaming(
-        name="Hating everyone 💢", url="https://twitch.tv/valbot"))
+        name="love my nonchalant king Nexus ❤️",
+        url="https://twitch.tv/valbot"
+    ))
 
 @bot.event
 async def on_message(message):
@@ -32,31 +34,34 @@ async def on_message(message):
     mentioned = bot.user.mentioned_in(message) or "val" in content
 
     if mentioned:
-        await message.channel.typing()
-        user_input = message.content
+        # typing indicator fixed — use channel.typing() as async context manager
+        async with message.channel.typing():
+            user_input = message.content
 
-        async with aiohttp.ClientSession() as session:
-            headers = {
-                "Authorization": f"Bearer {HF_TOKEN}",
-                "Content-Type": "application/json"
-            }
-            payload = {"inputs": f"User: {user_input}\nVal:"}
-            async with session.post(
-                "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium",
-                headers=headers, json=payload) as resp:
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    "Authorization": f"Bearer {HF_TOKEN}",
+                    "Content-Type": "application/json"
+                }
+                payload = {"inputs": f"User: {user_input}\nVal:"}
 
-                if resp.status == 200:
-                    data = await resp.json()
-                    if isinstance(data, list) and len(data) > 0:
-                        reply = data[0]["generated_text"].split("Val:")[-1].strip()
-                        if reply:
-                            await message.reply(f"{reply}")
+                async with session.post(
+                    "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium",
+                    headers=headers, json=payload
+                ) as resp:
+
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if isinstance(data, list) and len(data) > 0:
+                            reply = data[0].get("generated_text", "").split("Val:")[-1].strip()
+                            if reply:
+                                await message.reply(reply)
+                            else:
+                                await message.reply("Hmph... whatever.")
                         else:
-                            await message.reply("Hmph... whatever.")
+                            await message.reply("Hmph... not in the mood.")
                     else:
-                        await message.reply("Hmph... not in the mood.")
-                else:
-                    await message.reply(f"Hmph... I’m not answering that. (HuggingFace Error {resp.status})")
+                        await message.reply(f"Hmph... I’m not answering that. (HuggingFace Error {resp.status})")
 
     await bot.process_commands(message)
 
