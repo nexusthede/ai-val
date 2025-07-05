@@ -5,7 +5,7 @@ import openai
 from flask import Flask
 from threading import Thread
 
-# Keep‑alive web server for Render
+# Keep-alive server
 app = Flask('')
 
 @app.route('/')
@@ -20,22 +20,21 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# Discord bot setup
+# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Load OpenAI API key from env
+# OpenAI key
 openai_api_key = os.getenv("OPENAI_API_KEY")
-if not openai_api_key:
-    print("❌ ERROR: OPENAI_API_KEY environment variable not found! AI responses disabled.")
-else:
+if openai_api_key:
     openai.api_key = openai_api_key
+else:
+    print("⚠️ No OpenAI API Key set.")
 
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    # Short tsundere streaming status
     await bot.change_presence(activity=discord.Streaming(
         name="Hmph... What do you want? Go annoy someone else.",
         url="https://twitch.tv/nexus"
@@ -46,17 +45,16 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # Respond if bot is mentioned or "val" in message
     if bot.user.mentioned_in(message) or "val" in message.content.lower():
         if not openai_api_key:
-            await message.channel.send("⚠️ OpenAI API key missing or invalid. Can't respond.")
+            await message.channel.send("⚠️ OpenAI API key missing or invalid.")
             return
 
         async with message.channel.typing():
             prompt = (
-                "Val is a tsundere girl who is shy, a bit rude but secretly kind. "
-                "She talks naturally and bratty.\n"
-                f"User: {message.content}\nVal:"
+                "Val is a tsundere girl. She acts bratty and shy, but she's secretly sweet and kind. "
+                "She talks like a real person.\n"
+                f"User: {message.content.strip()}\nVal:"
             )
             try:
                 response = openai.Completion.create(
@@ -67,16 +65,16 @@ async def on_message(message):
                     stop=["User:", "Val:"]
                 )
                 reply = response.choices[0].text.strip()
-            except openai.error.AuthenticationError:
-                reply = "⚠️ OpenAI API key invalid or unauthorized."
+            except openai.OpenAIError:
+                reply = "⚠️ OpenAI API key invalid or unauthorized. (401)"
             except Exception as e:
-                print(f"OpenAI API error: {e}")
+                print(f"OpenAI Error: {e}")
                 reply = "Hmph... I’m not answering that. (OpenAI Error)"
 
             await message.channel.send(reply)
 
     await bot.process_commands(message)
 
-# Start keep-alive server and run bot
+# Run
 keep_alive()
 bot.run(os.getenv("TOKEN"))
