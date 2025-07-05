@@ -1,7 +1,7 @@
 import os
 import discord
 import aiohttp
-from discord.ext import commands, tasks
+from discord.ext import commands
 from keep_alive import keep_alive
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -12,8 +12,6 @@ if not GOOGLE_API_KEY or not TOKEN:
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.guilds = True
-intents.messages = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -22,12 +20,12 @@ HEADERS = {
     "X-Goog-Api-Key": GOOGLE_API_KEY,
 }
 
-API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateMessage"
 
-tsundere_intro = (
+TSUNDERE_SYSTEM_PROMPT = (
     "You are Val, a tsundere AI assistant. "
-    "You are a little shy and mean but also secretly kind and caring. "
-    "Speak with a playful mix of irritation and affection, teasing but sweet."
+    "You are shy and a little mean but secretly kind and caring. "
+    "Speak with playful irritation and affection, teasing but sweet."
 )
 
 @bot.event
@@ -48,19 +46,17 @@ async def on_message(message):
     if mentioned:
         await message.channel.typing()
 
-        prompt_text = (
-            f"{tsundere_intro}\n\nUser: {message.content}\nVal:"
-        )
-
+        # Google Gemini expects a 'messages' list of dicts with 'author' and 'content'
         payload = {
             "prompt": {
                 "messages": [
-                    {"author": "system", "content": tsundere_intro},
+                    {"author": "system", "content": TSUNDERE_SYSTEM_PROMPT},
                     {"author": "user", "content": message.content}
-                ],
-                "maxOutputTokens": 200,
-                "temperature": 0.7,
-            }
+                ]
+            },
+            "temperature": 0.7,
+            "candidateCount": 1,
+            "maxOutputTokens": 200,
         }
 
         async with aiohttp.ClientSession() as session:
