@@ -5,10 +5,9 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Val is alive!"
+    return "I'm alive!"
 
 def run():
-    print("Starting Flask server...")
     app.run(host='0.0.0.0', port=8080)
 
 def keep_alive():
