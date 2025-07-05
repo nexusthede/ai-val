@@ -20,8 +20,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
+    # Tsundere short streaming status
     await bot.change_presence(activity=discord.Streaming(
-        name="love my nonchalant king nexus ❤️", url="https://twitch.tv/valbot"))
+        name="Hmph... don’t get the wrong idea! 💢", url="https://twitch.tv/valbot"))
 
 @bot.event
 async def on_message(message):
@@ -32,32 +33,31 @@ async def on_message(message):
     mentioned = bot.user.mentioned_in(message) or "val" in content
 
     if mentioned:
-        async with message.channel.typing():
-            user_input = message.content
+        await message.channel.trigger_typing()
+        user_input = message.content
 
+        async with aiohttp.ClientSession() as session:
             headers = {
                 "Authorization": f"Bearer {HF_TOKEN}",
                 "Content-Type": "application/json"
             }
-            payload = {"inputs": user_input}
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    "https://api-inference.huggingface.co/models/facebook/blenderbot-400M-distill",
-                    headers=headers, json=payload) as resp:
+            payload = {"inputs": f"User: {user_input}\nVal:"}
+            async with session.post(
+                "https://api-inference.huggingface.co/models/facebook/blenderbot-400M-distill",
+                headers=headers, json=payload) as resp:
 
-                    if resp.status == 200:
-                        data = await resp.json()
-                        # The response is a dict with 'generated_text'
-                        reply = data.get("generated_text", "").strip()
+                if resp.status == 200:
+                    data = await resp.json()
+                    if isinstance(data, list) and len(data) > 0:
+                        reply = data[0].get("generated_text", "").split("Val:")[-1].strip()
                         if reply:
-                            # Avoid repeating user's message
-                            if reply.lower() == user_input.lower():
-                                reply = "Hmph... whatever."
                             await message.reply(reply)
                         else:
-                            await message.reply("Hmph... not in the mood.")
+                            await message.reply("Hmph... whatever.")
                     else:
-                        await message.reply(f"Hmph... I’m not answering that. (HuggingFace Error {resp.status})")
+                        await message.reply("Hmph... not in the mood.")
+                else:
+                    await message.reply(f"Hmph... I’m not answering that. (HuggingFace Error {resp.status})")
 
     await bot.process_commands(message)
 
