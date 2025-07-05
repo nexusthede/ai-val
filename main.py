@@ -12,7 +12,6 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    # Tsundere streaming status about hating Duck (the person)
     await bot.change_presence(activity=discord.Streaming(
         name="Ugh... I really *hate* that Duck guy... D-Don’t ask why!",
         url="https://twitch.tv/nexus"
