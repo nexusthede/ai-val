@@ -33,32 +33,27 @@ async def on_message(message):
 
     if mentioned:
         await message.channel.typing()
-        user_input = message.content
-
         async with aiohttp.ClientSession() as session:
-            headers = {
-                "Authorization": f"Bearer {HF_TOKEN}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "inputs": f"<|user|> {user_input}\n<|assistant|>",
-                "parameters": {
-                    "max_new_tokens": 100,
-                    "temperature": 0.7,
-                    "do_sample": True,
-                    "top_p": 0.9
-                }
-            }
+            headers = {"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "application/json"}
+            payload = {"inputs": f"User: {message.content}\nVal:"}
             async with session.post(
                 "https://api-inference.huggingface.co/models/microsoft/phi-3-mini-128k-instruct",
-                headers=headers, json=payload) as resp:
-
+                headers=headers, json=payload
+            ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    reply = data.get("generated_text", "").split("<|assistant|>")[-1].strip()
-                    await message.reply(reply if reply else "Tch... whatever.")
+                    # Data shape: [{'generated_text': 'User: ... Val: response'}]
+                    if isinstance(data, list) and len(data) > 0:
+                        reply_full = data[0].get("generated_text", "")
+                        reply = reply_full.split("Val:")[-1].strip()
+                        if reply:
+                            await message.reply(reply)
+                        else:
+                            await message.reply("Hmph... whatever.")
+                    else:
+                        await message.reply("Hmph... not in the mood.")
                 else:
-                    await message.reply(f"Hmph... I’m not answering that. (HuggingFace Error {resp.status})")
+                    await message.reply(f"Hmph... I’m not answering that. (HF Error {resp.status})")
 
     await bot.process_commands(message)
 
