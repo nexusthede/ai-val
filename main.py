@@ -1,3 +1,6 @@
+from keep_alive import keep_alive
+keep_alive()
+
 import discord
 import os
 import aiohttp
@@ -18,7 +21,7 @@ async def on_message(message):
         return
 
     if bot.user in message.mentions or "val" in message.content.lower():
-        async with message.channel.typing():  # ✅ FIXED this line
+        async with message.channel.typing():
             response = await get_val_response(message.content)
             await message.reply(response)
 
