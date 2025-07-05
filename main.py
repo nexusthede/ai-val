@@ -1,68 +1,57 @@
-import os
 import discord
+import os
+import aiohttp
 from discord.ext import commands
-import openai
-import asyncio
-import random
-from keep_alive import keep_alive
 
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-tsundere_intros = [
-    "Hmph... what do you want?",
-    "Tch, you again?",
-    "Ugh... I guess I’ll answer.",
-    "I-I'm not doing this because I like you, okay?!",
-    "S-Shut up! I’m busy... but fine."
-]
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"Val is online as {bot.user}")
+    print(f"🌸 Val is online as {bot.user}!")
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    lower = message.content.lower()
-    if message.content.startswith(bot.user.mention) or "val" in lower:
-        await message.channel.trigger_typing()
-        prompt = message.content
-
-        try:
-            response = await ask_openai(prompt)
-            intro = random.choice(tsundere_intros)
-            reply = f"{intro}\n{response}"
-            await message.reply(reply)
-        except Exception as e:
-            print(f"Error: {e}")
-            await message.reply("Ugh, I don’t feel like talking right now...")
+    if bot.user in message.mentions or "val" in message.content.lower():
+        async with message.channel.typing():  # ✅ FIXED this line
+            response = await get_val_response(message.content)
+            await message.reply(response)
 
     await bot.process_commands(message)
 
-async def ask_openai(prompt):
-    for _ in range(3):
-        try:
-            completion = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are Val, a bratty but secretly sweet tsundere girl who talks like a real person. You tease, act shy, and care deeply."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=150,
-                temperature=0.85
-            )
-            return completion.choices[0].message.content.strip()
-        except openai.error.RateLimitError:
-            await asyncio.sleep(2)
-        except Exception as e:
-            print("API error:", e)
-            return "Whatever... I’m not dealing with this right now."
+async def get_val_response(user_input):
+    prompt = [
+        {
+            "role": "system",
+            "content": "You are Val, a bratty tsundere anime girl. You act annoyed and smug, but you're secretly kind. Respond casually like a human girl, not a robot."
+        },
+        {
+            "role": "user",
+            "content": user_input
+        }
+    ]
 
-keep_alive()
+    headers = {
+        "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": "gpt-3.5-turbo",
+        "messages": prompt
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data) as resp:
+            if resp.status == 200:
+                result = await resp.json()
+                return result["choices"][0]["message"]["content"]
+            else:
+                return f"Hmph... I’m not answering that. (OpenAI Error {resp.status})"
+
 bot.run(os.getenv("TOKEN"))
