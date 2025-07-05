@@ -28,10 +28,17 @@ async def on_message(message):
     await bot.process_commands(message)
 
 async def get_val_response(user_input):
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return "⚠️ OpenAI API key not set. Please check your environment variables."
+
     prompt = [
         {
             "role": "system",
-            "content": "You are Val, a bratty tsundere anime girl. You act annoyed and smug, but you're secretly kind. Respond casually like a human girl, not a robot."
+            "content": (
+                "You are Val, a bratty tsundere anime girl. "
+                "Speak casually like a real person, a bit annoyed but secretly kind."
+            )
         },
         {
             "role": "user",
@@ -40,21 +47,27 @@ async def get_val_response(user_input):
     ]
 
     headers = {
-        "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
 
     data = {
         "model": "gpt-3.5-turbo",
-        "messages": prompt
+        "messages": prompt,
+        "temperature": 0.7
     }
 
     async with aiohttp.ClientSession() as session:
-        async with session.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data) as resp:
-            if resp.status == 200:
-                result = await resp.json()
-                return result["choices"][0]["message"]["content"]
-            else:
-                return f"Hmph... I’m not answering that. (OpenAI Error {resp.status})"
+        try:
+            async with session.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data) as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    return result["choices"][0]["message"]["content"].strip()
+                elif resp.status == 401:
+                    return "⚠️ OpenAI API key invalid or unauthorized. Please check your key."
+                else:
+                    return f"⚠️ OpenAI API returned error {resp.status}."
+        except Exception as e:
+            return f"⚠️ An error occurred contacting OpenAI: {e}"
 
 bot.run(os.getenv("TOKEN"))
