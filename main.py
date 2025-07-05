@@ -2,13 +2,14 @@ import os
 import discord
 import aiohttp
 from discord.ext import commands
-from keep_alive import keep_alive
+from flask import Flask
+from threading import Thread
 
 TOKEN = os.getenv("TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-if not TOKEN or not HF_TOKEN:
-    raise ValueError("TOKEN and HF_TOKEN environment variables must be set!")
+if not TOKEN or not GOOGLE_API_KEY:
+    raise ValueError("TOKEN and GOOGLE_API_KEY environment variables must be set!")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -17,67 +18,80 @@ intents.messages = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Flask keep alive
+app = Flask("")
+
+@app.route("/")
+def home():
+    return "Val is alive!"
+
+def run():
+    app.run(host="0.0.0.0", port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Streaming(
-        name="I’m not interested, okay?", url="https://twitch.tv/valbot"))
+        name="love my nonchalant king Nexus ❤️", url="https://twitch.tv/valbot"))
+
+async def query_google_ai(user_input):
+    url = "https://generativelanguage.googleapis.com/v1beta2/models/chat-bison-001:generateMessage"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {GOOGLE_API_KEY}",
+    }
+    # Tsundere personality prompt with user input
+    prompt = (
+        "You are Val, a tsundere AI bot. "
+        "You act prickly, sarcastic, but secretly kind and caring. "
+        "Reply to the user in a tsundere style.\n"
+        f"User: {user_input}\n"
+        "Val:"
+    )
+    payload = {
+        "prompt": {
+            "messages": [
+                {"author": "system", "content": "You are a helpful assistant."},
+                {"author": "user", "content": prompt}
+            ]
+        },
+        "temperature": 0.7,
+        "candidate_count": 1,
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, headers=headers, json=payload) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                try:
+                    return data["candidates"][0]["content"].strip()
+                except (KeyError, IndexError):
+                    return None
+            else:
+                return None
 
 @bot.event
 async def on_message(message):
     if message.author.bot or not message.guild:
         return
 
-    content = message.content.lower()
-    mentioned = bot.user.mentioned_in(message) or "val" in content
+    content_lower = message.content.lower()
+    mentioned = bot.user.mentioned_in(message) or "val" in content_lower
 
     if mentioned:
-        try:
-            await message.channel.trigger_typing()
-        except AttributeError:
-            # fallback for discord.py versions without trigger_typing
-            pass
-
-        user_input = message.content
-
-        async with aiohttp.ClientSession() as session:
-            headers = {
-                "Authorization": f"Bearer {HF_TOKEN}",
-                "Content-Type": "application/json"
-            }
-            # Falcon RW 1b uses the HuggingFace Inference API POST payload format
-            payload = {
-                "inputs": user_input,
-                "parameters": {"max_new_tokens": 150, "do_sample": True, "top_p": 0.9}
-            }
-
-            async with session.post(
-                "https://api-inference.huggingface.co/models/tiiuae/falcon-rw-1b",
-                headers=headers, json=payload) as resp:
-
-                if resp.status == 200:
-                    data = await resp.json()
-                    # Falcon RW returns text directly in 'generated_text' or just a string
-                    reply = ""
-                    if isinstance(data, dict) and "generated_text" in data:
-                        reply = data["generated_text"]
-                    elif isinstance(data, list) and len(data) > 0:
-                        reply = data[0].get("generated_text", "")
-                    elif isinstance(data, str):
-                        reply = data
-
-                    if reply:
-                        # Tsundere style: add slight attitude
-                        tsundere_reply = f"Hmph! {reply.strip()}"
-                        await message.reply(tsundere_reply)
-                    else:
-                        await message.reply("Hmph... whatever.")
-                elif resp.status == 404:
-                    await message.reply("Hmph... that model doesn't exist! (HF Error 404)")
-                else:
-                    await message.reply(f"Hmph... I’m not answering that. (HF Error {resp.status})")
+        async with message.channel.typing():
+            response = await query_google_ai(message.content)
+            if response:
+                await message.reply(response)
+            else:
+                await message.reply("Hmph... I'm not answering that right now.")
 
     await bot.process_commands(message)
 
-keep_alive()
-bot.run(TOKEN)
+if __name__ == "__main__":
+    keep_alive()
+    bot.run(TOKEN)
