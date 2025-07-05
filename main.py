@@ -1,80 +1,49 @@
-import os
 import discord
+import os
+import aiohttp
+from keep_alive import keep_alive
 from discord.ext import commands
-import openai
-from flask import Flask
-from threading import Thread
+from dotenv import load_dotenv
 
-# Keep-alive server
-app = Flask('')
+load_dotenv()
+TOKEN = os.getenv("TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-@app.route('/')
-def home():
-    return "✅ Val is awake!"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.daemon = True
-    t.start()
-
-# Bot setup
 intents = discord.Intents.default()
+intents.messages = True
 intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
 
-# OpenAI key
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if openai_api_key:
-    openai.api_key = openai_api_key
-else:
-    print("⚠️ No OpenAI API Key set.")
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+CHANNELS = []  # Can leave empty for all channels
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}")
-    await bot.change_presence(activity=discord.Streaming(
-        name="Hmph... What do you want? Go annoy someone else.",
-        url="https://twitch.tv/nexus"
-    ))
+    await bot.change_presence(activity=discord.Streaming(name="Tch... I hate ducks 🦆", url="https://twitch.tv/tsundereval"))
+    print(f"💖 Val is online as {bot.user}")
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    if bot.user.mentioned_in(message) or "val" in message.content.lower():
-        if not openai_api_key:
-            await message.channel.send("⚠️ OpenAI API key missing or invalid.")
-            return
+    if CHANNELS and message.channel.id not in CHANNELS:
+        return
 
-        async with message.channel.typing():
-            prompt = (
-                "Val is a tsundere girl. She acts bratty and shy, but she's secretly sweet and kind. "
-                "She talks like a real person.\n"
-                f"User: {message.content.strip()}\nVal:"
-            )
-            try:
-                response = openai.Completion.create(
-                    engine="text-davinci-003",
-                    prompt=prompt,
-                    max_tokens=150,
-                    temperature=0.7,
-                    stop=["User:", "Val:"]
-                )
-                reply = response.choices[0].text.strip()
-            except openai.OpenAIError:
-                reply = "⚠️ OpenAI API key invalid or unauthorized. (401)"
-            except Exception as e:
-                print(f"OpenAI Error: {e}")
-                reply = "Hmph... I’m not answering that. (OpenAI Error)"
+    if "val" in message.content.lower() or bot.user in message.mentions:
+        await message.channel.typing()
+        prompt = message.content.strip()
+        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+        payload = {"inputs": f"{prompt}\nTsundere girl Val:"}
 
-            await message.channel.send(reply)
+        async with aiohttp.ClientSession() as session:
+            async with session.post("https://api-inference.huggingface.co/models/facebook/blenderbot-3B", headers=headers, json=payload) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    reply = data.get("generated_text", "Hmph... I don’t feel like talking.")
+                else:
+                    reply = f"Hmph... I’m not answering that. (Hugging Face Error {resp.status})"
+
+        await message.reply(reply)
 
     await bot.process_commands(message)
-
-# Run
-keep_alive()
-bot.run(os.getenv("TOKEN"))
