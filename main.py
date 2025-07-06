@@ -12,15 +12,12 @@ if not TOKEN or not GOOGLE_API_KEY:
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.guilds = True
-intents.messages = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 TSUNDERE_SYSTEM_PROMPT = (
     "You are Val, a tsundere AI assistant. "
-    "You are a bit sassy and sharp-tongued but secretly caring. "
-    "Be playful, sarcastic, and a little shy, but kind deep down."
+    "You are sassy, sarcastic, and shy but secretly kind."
 )
 
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateText"
@@ -40,10 +37,8 @@ async def on_message(message):
     if message.author.bot or not message.guild:
         return
 
-    content = message.content.lower()
-    mentioned = bot.user.mentioned_in(message) or "val" in content
-
-    if mentioned:
+    content_lower = message.content.lower()
+    if bot.user.mentioned_in(message) or "val" in content_lower:
         await message.channel.typing()
 
         payload = {
@@ -58,20 +53,16 @@ async def on_message(message):
             "maxOutputTokens": 200,
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(API_URL, headers=HEADERS, json=payload) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    try:
-                        reply = data["candidates"][0]["content"].strip()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(API_URL, headers=HEADERS, json=payload) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        reply = data.get("candidates", [{}])[0].get("content", "").strip()
                         if reply:
                             await message.reply(reply)
-                    except Exception:
-                        # Fail silently - no reply on parse error
-                        pass
-                else:
-                    # Fail silently - no reply on HTTP error
-                    pass
+        except Exception:
+            pass  # silently ignore errors
 
     await bot.process_commands(message)
 
