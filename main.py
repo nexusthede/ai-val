@@ -1,64 +1,72 @@
 import os
 import discord
 import requests
+from flask import Flask
+from threading import Thread
 from discord.ext import commands
-from keep_alive import keep_alive
 
 TOKEN = os.getenv("TOKEN")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 if not TOKEN or not GOOGLE_API_KEY:
-    raise ValueError("Missing TOKEN or GOOGLE_API_KEY.")
+    raise ValueError("Missing environment variables!")
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-headers = {
-    "Content-Type": "application/json",
-    "X-Goog-Api-Key": GOOGLE_API_KEY
-}
+app = Flask(__name__)
 
-API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+@app.route("/")
+def home():
+    return "Val is online."
 
-def get_val_reply(user_message):
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": f"You're Val, a girl with a naturally tsundere personality — playful, sometimes flustered, but realistic. Keep your tone casual and don't overdo it. Someone said to you: \"{user_message}\" — how do you respond?"
-                    }
-                ]
-            }
-        ]
-    }
-
-    try:
-        res = requests.post(API_URL, headers=headers, json=payload)
-        if res.status_code == 200:
-            data = res.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        else:
-            return "Hmph... I'm not answering that right now."
-    except Exception:
-        return "Hmph... I'm not answering that right now."
+def keep_alive():
+    Thread(target=lambda: app.run(host="0.0.0.0", port=8080)).start()
 
 @bot.event
 async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Streaming(
-        name="Being cute? M-Me? You're dreaming..", url="https://twitch.tv/valbot"))
+        name="Being cute? M-Me? You're dreaming..",
+        url="https://twitch.tv/valbot"
+    ))
+    print(f"Logged in as {bot.user}")
+
+def generate_val_response(user_input):
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    headers = {
+        "Content-Type": "application/json",
+        "X-goog-api-key": GOOGLE_API_KEY
+    }
+    data = {
+        "contents": [{
+            "parts": [{
+                "text": f"You're Val, a naturally tsundere girl who's flustered but realistic. Reply naturally to this: {user_input}"
+            }]
+        }]
+    }
+
+    try:
+        res = requests.post(url, headers=headers, json=data, timeout=10)
+        if res.status_code == 200:
+            out = res.json()
+            return out["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        print(f"Error generating response: {e}")
+        return None
 
 @bot.event
 async def on_message(message):
     if message.author.bot or not message.guild:
         return
 
-    if bot.user.mentioned_in(message) or message.content.lower().startswith("val"):
+    if bot.user.mentioned_in(message) or "val" in message.content.lower():
         await message.channel.typing()
-        reply = get_val_reply(message.content)
-        await message.reply(reply)
+        reply = generate_val_response(message.content)
+        if reply:
+            await message.reply(reply)
+        else:
+            await message.reply("...ugh. Not answering that right now.")
 
     await bot.process_commands(message)
 
