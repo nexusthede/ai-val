@@ -8,7 +8,7 @@ TOKEN = os.getenv("TOKEN")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 if not TOKEN or not GOOGLE_API_KEY:
-    raise ValueError("TOKEN and GOOGLE_API_KEY must be set!")
+    raise ValueError("TOKEN and GOOGLE_API_KEY environment variables must be set!")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -23,6 +23,34 @@ async def on_ready():
     await bot.change_presence(activity=discord.Streaming(
         name="Being cute? M-Me? You're dreaming..", url="https://twitch.tv/valbot"))
 
+async def query_gemini_api(prompt: str):
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    headers = {
+        "Content-Type": "application/json",
+    }
+    params = {
+        "key": GOOGLE_API_KEY
+    }
+    json_payload = {
+        "prompt": {
+            "messages": [{"content": prompt, "author": "user"}]
+        },
+        "temperature": 0.7,
+        "candidate_count": 1,
+        "max_output_tokens": 256
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, headers=headers, params=params, json=json_payload) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                try:
+                    return data["candidates"][0]["content"]
+                except Exception:
+                    return None
+            else:
+                return None
+
 @bot.event
 async def on_message(message):
     if message.author.bot or not message.guild:
@@ -33,38 +61,26 @@ async def on_message(message):
 
     if mentioned:
         await message.channel.typing()
-        user_input = message.content
+        prompt = message.content
 
-        try:
-            response = await get_gemini_response(user_input)
-            await message.reply(response or "Hmph... I'm not answering that right now.")
-        except Exception as e:
-            print("Error:", e)
+        response = await query_gemini_api(prompt)
+        if response:
+            # Tsundere style: add some light sass randomly
+            sass_phrases = [
+                "Hmph! Don't get the wrong idea.",
+                "Tch, what do you want now?",
+                "Not that I care, but whatever.",
+                "Ugh, you're so annoying sometimes.",
+                "*crosses arms* Speak already."
+            ]
+            import random
+            sass = random.choice(sass_phrases)
+            reply = f"{sass}\n{response.strip()}"
+            await message.reply(reply)
+        else:
             await message.reply("Hmph... I'm not answering that right now.")
 
     await bot.process_commands(message)
 
-async def get_gemini_response(user_input):
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-    headers = {
-        "Content-Type": "application/json",
-        "X-goog-api-key": GOOGLE_API_KEY
-    }
-    data = {
-        "contents": [{
-            "parts": [{
-                "text": f"You are Val, a sassy and sweet tsundere girl. Respond naturally with a playful but realistic tone. Here's what the user said: '{user_input}'"
-            }]
-        }]
-    }
-
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, headers=headers, json=data) as resp:
-            if resp.status == 200:
-                result = await resp.json()
-                try:
-                    return result["candidates"][0]["content"]["parts"][0]["text"]
-                except:
-                    return None
-            else:
-                return None
+keep_alive()
+bot.run(TOKEN)
