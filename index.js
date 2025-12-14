@@ -30,7 +30,7 @@ client.once('ready', () => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // Only reply if Val is mentioned
+  // Only respond if Val is mentioned
   const valRegex = /\bval\b/i;
   if (!valRegex.test(message.content)) return;
 
@@ -44,7 +44,8 @@ client.on('messageCreate', async (message) => {
   const userMessage = message.content.replace(/\n/g, ' ').trim();
 
   // Build personality prompt
-  let prompt = "You are Val, a Discord user-like AI. Reply naturally like a real person.\n";
+  let prompt = "You are Val, a Discord AI. Reply naturally like a human.\n";
+
   if (message.author.id === SOFT_USER) {
     prompt += "Soft, shy, gentle, slightly hesitant with this user.\n";
   } else if (message.author.id === MEAN_USER) {
@@ -52,14 +53,15 @@ client.on('messageCreate', async (message) => {
   } else {
     prompt += "Tsundere, mildly sarcastic but helpful.\n";
   }
+
   prompt += `User: ${userMessage}\nVal:`;
 
-  // Function to get reply with retries
+  // Function to get AI reply with retries
   async function getHermesReply(promptText) {
     try {
       let reply;
 
-      // Retry up to 3 times
+      // Retry up to 3 times internally
       for (let i = 0; i < 3; i++) {
         const res = await axios.post(HERMES_API_URL, {
           model: HERMES_MODEL,
@@ -68,16 +70,16 @@ client.on('messageCreate', async (message) => {
         });
 
         reply = res.data?.output_text?.trim();
-        if (reply) break;
+        if (reply) break; // Got a reply, stop retrying
       }
 
-      // Single personality-flavored fallback
+      // Single personality-flavored fallback if all retries fail
       if (!reply) reply = "Hmph… I don’t know what to say!";
 
       // Remove repeated prompt text
       reply = reply.replace(promptText, '').trim();
 
-      // Cap length
+      // Cap reply length
       if (reply.length > 180) reply = reply.slice(0, 180);
 
       return reply;
