@@ -12,7 +12,7 @@ const client = new Client({
   ],
 });
 
-// Personality IDs
+// User IDs for personality modes
 const SOFT_USER = '1440364578012790856';
 const MEAN_USER = '856264288858538004';
 
@@ -30,7 +30,7 @@ client.once('ready', () => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // Only reply when Val is mentioned
+  // Only reply if Val is mentioned
   const valRegex = /\bval\b/i;
   if (!valRegex.test(message.content)) return;
 
@@ -40,42 +40,39 @@ client.on('messageCreate', async (message) => {
   if (now - last < 4000) return;
   cooldown.set(message.author.id, now);
 
+  // Clean message
+  const userMessage = message.content.replace(/\n/g, ' ').trim();
+
   // Build personality prompt
   let prompt = "You are Val, a Discord user-like AI. Reply naturally like a real person.\n";
-
   if (message.author.id === SOFT_USER) {
-    prompt += "You are soft, shy, gentle, slightly hesitant with this user.\n";
+    prompt += "Soft, shy, gentle, slightly hesitant with this user.\n";
   } else if (message.author.id === MEAN_USER) {
-    prompt += "You are blunt, dismissive, a bit mean but still helpful with this user.\n";
+    prompt += "Blunt, dismissive, a bit mean but still helpful with this user.\n";
   } else {
-    prompt += "You are tsundere — mildly sarcastic but helpful.\n";
+    prompt += "Tsundere, mildly sarcastic but helpful.\n";
   }
+  prompt += `User: ${userMessage}\nVal:`;
 
-  prompt += `User: ${message.content}\nVal:`;
-
-  // Function to get reply with retry
+  // Function to get reply with retries
   async function getHermesReply(promptText) {
     try {
-      const response = await axios.post(HERMES_API_URL, {
-        model: HERMES_MODEL,
-        prompt: promptText,
-        max_tokens: 60
-      });
+      let reply;
 
-      let reply = response.data?.output_text?.trim();
-
-      // Retry once if reply is empty
-      if (!reply) {
-        const retry = await axios.post(HERMES_API_URL, {
+      // Retry up to 3 times
+      for (let i = 0; i < 3; i++) {
+        const res = await axios.post(HERMES_API_URL, {
           model: HERMES_MODEL,
           prompt: promptText,
-          max_tokens: 60
+          max_tokens: 120
         });
-        reply = retry.data?.output_text?.trim();
+
+        reply = res.data?.output_text?.trim();
+        if (reply) break;
       }
 
-      // Fallback if still empty
-      if (!reply) reply = "…huh? I don’t get that…";
+      // Single personality-flavored fallback
+      if (!reply) reply = "Hmph… I don’t know what to say!";
 
       // Remove repeated prompt text
       reply = reply.replace(promptText, '').trim();
