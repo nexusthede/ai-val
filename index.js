@@ -12,11 +12,11 @@ const client = new Client({
   ],
 });
 
-// User IDs for personality modes
+// Personality IDs
 const SOFT_USER = '1440364578012790856';
 const MEAN_USER = '856264288858538004';
 
-// Cooldown map to prevent spam
+// Cooldown map
 const cooldown = new Map();
 
 // Hermes free endpoint
@@ -40,7 +40,7 @@ client.on('messageCreate', async (message) => {
   if (now - last < 4000) return;
   cooldown.set(message.author.id, now);
 
-  // Build prompt for Hermes
+  // Build personality prompt
   let prompt = "You are Val, a Discord user-like AI. Reply naturally like a real person.\n";
 
   if (message.author.id === SOFT_USER) {
@@ -53,26 +53,45 @@ client.on('messageCreate', async (message) => {
 
   prompt += `User: ${message.content}\nVal:`;
 
-  try {
-    const response = await axios.post(HERMES_API_URL, {
-      model: HERMES_MODEL,
-      prompt,
-      max_tokens: 60
-    });
+  // Function to get reply with retry
+  async function getHermesReply(promptText) {
+    try {
+      const response = await axios.post(HERMES_API_URL, {
+        model: HERMES_MODEL,
+        prompt: promptText,
+        max_tokens: 60
+      });
 
-    let reply = response.data?.output_text || "…I’m not sure…";
+      let reply = response.data?.output_text?.trim();
 
-    // Remove repeated prompt text
-    reply = reply.replace(prompt, '').trim();
+      // Retry once if reply is empty
+      if (!reply) {
+        const retry = await axios.post(HERMES_API_URL, {
+          model: HERMES_MODEL,
+          prompt: promptText,
+          max_tokens: 60
+        });
+        reply = retry.data?.output_text?.trim();
+      }
 
-    // Cap length to prevent overflow
-    if (reply.length > 180) reply = reply.slice(0, 180);
+      // Fallback if still empty
+      if (!reply) reply = "…huh? I don’t get that…";
 
-    await message.reply(reply);
-  } catch (err) {
-    console.error(err.message);
-    message.reply("…I can’t respond right now.");
+      // Remove repeated prompt text
+      reply = reply.replace(promptText, '').trim();
+
+      // Cap length
+      if (reply.length > 180) reply = reply.slice(0, 180);
+
+      return reply;
+    } catch (err) {
+      console.error(err.message);
+      return "…I can’t respond right now.";
+    }
   }
+
+  const reply = await getHermesReply(prompt);
+  await message.reply(reply);
 });
 
 client.login(process.env.BOT_TOKEN);
